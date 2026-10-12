@@ -1,19 +1,20 @@
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, FiniteFloat
+from pathlib import Path
 import random
 
 app = FastAPI()
 
 # Obsługa plików statycznych (serwowanie HTML, JS, CSS)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=str(Path(__file__).resolve().parent / "static")), name="static")
 
 
 class Points(BaseModel):
-    A: tuple
-    B: tuple
-    P: tuple
+    A: tuple[FiniteFloat, FiniteFloat]
+    B: tuple[FiniteFloat, FiniteFloat]
+    P: tuple[FiniteFloat, FiniteFloat]
 
 
 def wyznacznik_macierzy(A, B, P):
@@ -52,13 +53,17 @@ def sprawdz_punkt(points: Points):
     wynik_vec = iloczyn_wektorowy(points.A, points.B, points.P)
     roznica = wynik_det - wynik_vec
 
-    message = ""
+    if points.A == points.B:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail="Punkty A i B muszą być różne")
     if wynik_det > 0:
-        message = "Punkt P znajduje się po prawej stronie odcinka AB."
+        message = "Punkt P znajduje się po lewej stronie skierowanego odcinka AB."
     elif wynik_det < 0:
-        message = "Punkt P znajduje się po lewej stronie odcinka AB."
-    else:
+        message = "Punkt P znajduje się po prawej stronie skierowanego odcinka AB."
+    elif all(min(a, b) <= p <= max(a, b) for a, b, p in zip(points.A, points.B, points.P)):
         message = "Punkt P leży na odcinku AB."
+    else:
+        message = "Punkt P leży na prostej AB, poza odcinkiem."
 
     return {
         "wyznacznik_macierzy": wynik_det,
@@ -71,4 +76,4 @@ def sprawdz_punkt(points: Points):
 # Serwowanie pliku index.html na żądanie GET
 @app.get("/")
 def read_index():
-    return FileResponse('static/index.html')
+    return FileResponse(Path(__file__).resolve().parent / 'static/index.html')
